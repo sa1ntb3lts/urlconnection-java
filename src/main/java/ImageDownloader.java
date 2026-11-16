@@ -22,21 +22,74 @@ public class ImageDownloader {
             System.err.println("Uso: java ImageDownloader <URL>");
             return;
         }
-        HttpURLConnection connection = null;
+
+        URL url = validarURL(args[0]);
+        if (url == null) {
+            return;
+        }
+
+        System.out.println("ImageDownloader");
+        System.out.println("---------------------------------------");
+        System.out.println("Conectando con: " + url + "\n");
+
+        String contenido = obtenerHTML(url);
+        if (contenido == null) {
+            return;
+        }
+
+        System.out.println("\nAnalizando documento HTML...\n");
+        Set<String> imagenes = extraerImagenes(contenido);
+        System.out.println("Imágenes encontradas: " + imagenes.size() + "\n");
+
         try {
-            URI uri = URI.create(args[0]);
+            Path directorio = Path.of("imagenes");
+            Files.createDirectories(directorio);
+
+            int numero = 1;
+            int exitosas = 0;
+            int fallidas = 0;
+            for (String img : imagenes) {
+                URL urlImagen = resolverImagen(url, img);
+                if (urlImagen != null && descargarImagen(urlImagen, directorio, numero++)) {
+                    exitosas++;
+                } else {
+                    fallidas++;
+                }
+            }
+
+            System.out.println("\n---------------------------------------");
+            System.out.println("Descargas exitosas: " + exitosas);
+            System.out.println("Descargas fallidas: " + fallidas);
+            System.out.println("Directorio: ./imagenes/");
+        } catch (Exception e) {
+            System.err.println("Error: " + e.getMessage());
+        }
+    }
+
+    public static URL validarURL(String argumento) {
+        try {
+            URI uri = URI.create(argumento);
             URL url = uri.toURL();
 
             String protocolo = url.getProtocol();
             if (!"http".equalsIgnoreCase(protocolo) && !"https".equalsIgnoreCase(protocolo)) {
                 System.err.println("Protocolo no admitido: " + protocolo);
-                return;
+                return null;
             }
             if (url.getHost() == null || url.getHost().isBlank()) {
                 System.err.println("Servidor inválido.");
-                return;
+                return null;
             }
+            return url;
+        } catch (Exception e) {
+            System.err.println("Error: " + e.getMessage());
+            return null;
+        }
+    }
 
+    public static String obtenerHTML(URL url) {
+        HttpURLConnection connection = null;
+        try {
             connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("GET");
             connection.setConnectTimeout(10000);
@@ -61,24 +114,10 @@ public class ImageDownloader {
                     html.append(linea).append("\n");
                 }
             }
-
-            String contenido = html.toString();
-            Set<String> imagenes = extraerImagenes(contenido);
-            System.out.println("Imágenes encontradas: " + imagenes.size());
-
-            Path directorio = Path.of("imagenes");
-            Files.createDirectories(directorio);
-
-            int numero = 1;
-            for (String img : imagenes) {
-                URL urlImagen = resolverImagen(url, img);
-                if (urlImagen != null) {
-                    descargarImagen(urlImagen, directorio, numero++);
-                }
-            }
-
+            return html.toString();
         } catch (Exception e) {
             System.err.println("Error: " + e.getMessage());
+            return null;
         } finally {
             if (connection != null) {
                 connection.disconnect();
