@@ -6,6 +6,10 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ImageDownloader {
     public static void main(String[] args) {
@@ -54,7 +58,11 @@ public class ImageDownloader {
             }
 
             String contenido = html.toString();
-            System.out.println(contenido.substring(0, Math.min(500, contenido.length())));
+            Set<String> imagenes = extraerImagenes(contenido);
+            System.out.println("Imágenes encontradas: " + imagenes.size());
+            for (String img : imagenes) {
+                System.out.println(" - " + img);
+            }
 
         } catch (Exception e) {
             System.err.println("Error: " + e.getMessage());
@@ -63,5 +71,21 @@ public class ImageDownloader {
                 connection.disconnect();
             }
         }
+    }
+
+    public static Set<String> extraerImagenes(String html) {
+        Set<String> imagenes = new LinkedHashSet<>();
+        Pattern imgPattern = Pattern.compile("<img\\b[^>]*>", Pattern.CASE_INSENSITIVE);
+        Pattern srcPattern = Pattern.compile("\\bsrc\\s*=\\s*([\"'])(.*?)\\1", Pattern.CASE_INSENSITIVE);
+
+        Matcher imgMatcher = imgPattern.matcher(html);
+        while (imgMatcher.find()) {
+            String etiqueta = imgMatcher.group();
+            Matcher srcMatcher = srcPattern.matcher(etiqueta);
+            if (srcMatcher.find()) {
+                imagenes.add(srcMatcher.group(2));
+            }
+        }
+        return imagenes;
     }
 }
