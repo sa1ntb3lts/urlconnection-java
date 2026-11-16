@@ -2,6 +2,7 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.Charset;
@@ -61,7 +62,10 @@ public class ImageDownloader {
             Set<String> imagenes = extraerImagenes(contenido);
             System.out.println("Imágenes encontradas: " + imagenes.size());
             for (String img : imagenes) {
-                System.out.println(" - " + img);
+                URL urlImagen = resolverImagen(url, img);
+                if (urlImagen != null) {
+                    System.out.println(" - " + urlImagen);
+                }
             }
 
         } catch (Exception e) {
@@ -87,5 +91,25 @@ public class ImageDownloader {
             }
         }
         return imagenes;
+    }
+
+    public static URL resolverImagen(URL urlPagina, String referencia) {
+        if (referencia == null || referencia.isBlank()) {
+            return null;
+        }
+        String lower = referencia.trim().toLowerCase();
+        if (lower.startsWith("data:") || lower.startsWith("javascript:")) {
+            return null;
+        }
+        try {
+            URL resuelta = new URL(urlPagina, referencia.trim());
+            String protocolo = resuelta.getProtocol();
+            if (!"http".equalsIgnoreCase(protocolo) && !"https".equalsIgnoreCase(protocolo)) {
+                return null;
+            }
+            return resuelta;
+        } catch (MalformedURLException e) {
+            return null;
+        }
     }
 }
