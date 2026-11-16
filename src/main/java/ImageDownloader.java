@@ -1,12 +1,16 @@
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -61,10 +65,15 @@ public class ImageDownloader {
             String contenido = html.toString();
             Set<String> imagenes = extraerImagenes(contenido);
             System.out.println("Imágenes encontradas: " + imagenes.size());
+
+            Path directorio = Path.of("imagenes");
+            Files.createDirectories(directorio);
+
+            int numero = 1;
             for (String img : imagenes) {
                 URL urlImagen = resolverImagen(url, img);
                 if (urlImagen != null) {
-                    System.out.println(" - " + urlImagen);
+                    descargarImagen(urlImagen, directorio, numero++);
                 }
             }
 
@@ -110,6 +119,80 @@ public class ImageDownloader {
             return resuelta;
         } catch (MalformedURLException e) {
             return null;
+        }
+    }
+
+    public static boolean descargarImagen(URL urlImagen, Path directorio, int numero) {
+        HttpURLConnection connection = null;
+        Path destino = null;
+        long maxBytes = 10L * 1024 * 1024;
+        try {
+            connection = (HttpURLConnection) urlImagen.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(15000);
+
+            int codigo = connection.getResponseCode();
+            if (codigo != HttpURLConnection.HTTP_OK) {
+                System.err.println("Error HTTP " + codigo + " en: " + urlImagen);
+                return false;
+            }
+
+            String tipo = connection.getContentType();
+            String ext = null;
+            if (tipo != null) {
+                String mime = tipo.split(";")[0].trim().toLowerCase();
+                if (mime.equals("image/png")) ext = "png";
+                else if (mime.equals("image/jpeg")) ext = "jpg";
+                else if (mime.equals("image/gif")) ext = "gif";
+                else if (mime.equals("image/webp")) ext = "webp";
+            }
+            if (ext == null) {
+                System.err.println("No es imagen admitida (" + tipo + "): " + urlImagen);
+                return false;
+            }
+
+            if (connection.getContentLengthLong() > maxBytes) {
+                System.err.println("Excede 10 MB: " + urlImagen);
+                return false;
+            }
+
+            String nombre = String.format("imagen_%03d.%s", numero, ext);
+            destino = directorio.resolve(nombre);
+            int intento = 1;
+            while (Files.exists(destino)) {
+                nombre = String.format("imagen_%03d_%d.%s", numero, intento++, ext);
+                destino = directorio.resolve(nombre);
+            }
+
+            try (InputStream input = connection.getInputStream();
+                 OutputStream output = Files.newOutputStream(destino)) {
+                byte[] buffer = new byte[8192];
+                int leidos;
+                long total = 0;
+                while ((leidos = input.read(buffer)) != -1) {
+                    total += leidos;
+                    if (total > maxBytes) {
+                        throw new IOException("Supera el límite de 10 MB");
+                    }
+                    output.write(buffer, 0, leidos);
+                }
+            }
+
+            System.out.println("Descargada: " + nombre);
+            return true;
+        } catch (Exception e) {
+            if (destino != null) {
+                try {
+                    Files.deleteIfExists(destino);
+                } catch (IOException ignored) {}
+            }
+            System.err.println("Error al descargar " + urlImagen + ": " + e.getMessage());
+            return false;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
     }
 }
